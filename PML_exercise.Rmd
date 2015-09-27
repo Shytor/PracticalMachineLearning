@@ -1,0 +1,77 @@
+---
+title: "Exercise Prediction"
+author: "Trevor Gast"
+date: "September 18, 2015"
+output: html_document
+---
+##Weight Lifting Exercise Prediction
+###Practical Machine Learning Assignment - by Trevor Gast
+
+By using the Human Activity Recognition dataset for weight lifting exercises, we attempt to categorize exercises performed incorrectly using practical machine learning algorithms. Each exercise is categorized into 5 classes, class "A" being the correct exercise and the remaining 4 are different mistakes. Using the given data, we will construct a model to predict which of the 5 classes when monitoring future exercises.
+
+##Data
+
+```{r}
+library(RCurl)
+library(caret)
+set.seed(1551)
+# load the data sets
+x <- getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+trainData <- read.csv(text = x)
+x <- getURL("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+testData <- read.csv(text = x)
+```
+
+
+##Cleaning Data and pre-processing
+Next we can purge unnecessary data. If the columns have NA in the testing set, then it will be useless to include them in the training set. We must convert the "classe" variable to factor for processing purposes. And finally, we subset only the variables that contain data useful for prediction. Thus, we remove rows used by the researchers, like timestamps, that do not contain exercise data.
+
+```{r}
+# remove columns with NA, use test data as referal for NA
+cols.without.na = colSums(is.na(testData)) == 0
+trainData = trainData[, cols.without.na]
+testData = testData[, cols.without.na]
+# convert the classe column to factor
+trainData$classe <- as.factor(trainData$classe)
+# remove other unnecessary columns
+# filter columns on: belt, forearm, arm, dumbell
+filter = grepl("belt|arm|dumbell|classe", names(trainData))
+trainData = trainData[, filter]
+filter = grepl("belt|arm|dumbell|classe", names(testData))
+testData = testData[, filter]
+```
+A quick feature plot shows no drastic changes in variance or output for the given features. In other words, no obvious predictors.
+
+```{r, echo=FALSE}
+featurePlot(trainData[,!(names(trainData) %in% c("classe"))], trainData$classe, "strip")
+```
+
+##Training
+
+For training, we further subset to a group of 75% of the training data, and 25% for testing accuracy.
+
+The training method used is random forests (rf) with 5 k-fold corss validation.
+
+```{r}
+inTrain <- createDataPartition(y=trainData$classe, p=0.75, list=FALSE)
+training1 <- trainData[inTrain,]
+testing1 <- trainData[-inTrain,]
+modFit <- train(classe~.,method="rf",data=training1,prox=TRUE,allowParallel=TRUE,trControl=trainControl(method="cv",number=5))
+modFit
+```
+
+Accuracy is a stellar 98% in the training set.
+
+Then use the model to predict on the testing subset and create a confusion matrix. 
+
+```{r}
+pred <- predict(modFit,testing1)
+testing1$predRight <- pred==testing1$classe
+OOSAcc <- sum(pred==testing1$classe)/length(testing1$classe)*100
+table(pred,testing1$classe)
+
+```
+
+In the confusion matrix, we can see that only a few errors are made. The out of sample accuracy is `r OOSAcc`%.
+
+
